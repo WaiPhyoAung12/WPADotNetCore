@@ -53,8 +53,83 @@ app.MapGet("/getSnake/{id}", (int id) =>
 
     if(result is null)
         return Results.NotFound("No Record Found");
-    return Results.Ok(result!.Tbl_Snakes.FirstOrDefault(x=>x.Id==id));
+
+    var selectSnake = result.Tbl_Snakes.FirstOrDefault(x => x.Id == id);
+    if (selectSnake is null)
+        return Results.NotFound("No Record Found");
+    return Results.Ok(selectSnake);
 });
+app.MapPost("/CreateBlog", (Tbl_Snakes snake) =>
+{
+    string folderPath = "Data/Snakes.json";
+    var jsonStr = File.ReadAllText(folderPath);
+    var result = JsonConvert.DeserializeObject<SnakeResponseModel>(jsonStr);
+    if (result is null)
+        return Results.NotFound("No Record Found");
+
+    var snakeList = result.Tbl_Snakes.ToList();
+    int lastId=Convert.ToInt32(snakeList.LastOrDefault()?.Id);
+    snake.Id = lastId + 1;
+    snakeList.Add(snake);
+
+    result.Tbl_Snakes=snakeList.ToArray();
+    var jsonResult= JsonConvert.SerializeObject(result);
+    File.WriteAllText(folderPath, jsonResult);
+    return Results.Ok("Successfully Created");
+});
+
+app.MapPut("/updateSnake/{id}", (int id, Tbl_Snakes snake) =>
+{
+    string folderPath = "Data/Snakes.json";
+    var jsonStr = File.ReadAllText(folderPath);
+    var result = JsonConvert.DeserializeObject<SnakeResponseModel>(jsonStr);
+    if (result is null)
+        return Results.NotFound("No Record Found");
+
+    var selectSnake=result.Tbl_Snakes.FirstOrDefault(x=>x.Id==id);
+    if (selectSnake is null)
+        return Results.NotFound("No Record Found");
+
+    if (snake.MMName is not null)
+        selectSnake.MMName = snake.MMName;
+
+    if(snake.EngName is not null)
+        selectSnake.EngName=snake.EngName;
+
+    if(snake.Detail is not null)
+        selectSnake.Detail=snake.Detail;
+
+    if(snake.IsPoison is not null)
+        selectSnake.IsPoison=snake.IsPoison;
+
+    if (snake.IsDanger is not null)
+        selectSnake.IsDanger = snake.IsDanger;
+
+   var updateJsonStr=JsonConvert.SerializeObject(result);
+    File.WriteAllText(folderPath, updateJsonStr);
+    return Results.Ok("Successfully Updated");
+});
+
+app.MapDelete("/deleteBlog/{id}", (int id) =>
+{
+    
+    string folderPath = "Data/Snakes.json";
+    var jsonStr = File.ReadAllText(folderPath);
+    var result = JsonConvert.DeserializeObject<SnakeResponseModel>(jsonStr);
+    if (result is null)
+        return Results.NotFound("No Record Found");
+
+    var selectSnake = result.Tbl_Snakes.FirstOrDefault(x => x.Id == id);
+    if (selectSnake is null)
+        return Results.NotFound("No Record Found");
+
+    result.Tbl_Snakes = result.Tbl_Snakes.Where(x => x.Id != id).ToArray();
+    var updateJsonStr = JsonConvert.SerializeObject(result);
+    File.WriteAllText(folderPath, updateJsonStr);
+    return Results.Ok("Successfully Deleted");
+
+});
+
 app.Run();
 
 
