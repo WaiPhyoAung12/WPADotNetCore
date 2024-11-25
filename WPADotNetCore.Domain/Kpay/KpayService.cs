@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using WPADotNetCore.Databases.Models;
 using WPADotNetCore.Databases.ViewModels;
+using WPADotNetCore.Domain.Models;
 
 namespace WPADotNetCore.Domain.Kpay
 {
@@ -12,7 +14,7 @@ namespace WPADotNetCore.Domain.Kpay
     {
         private readonly AppDbContext _db = new AppDbContext();
 
-        public string Registration(UserViewModel user)
+        public async Task<Result<UserViewModel>> Registration(UserViewModel user)
         {
             if (user.MobileNo != null && user.FullName != null && user.Pin != null)
             {
@@ -25,29 +27,32 @@ namespace WPADotNetCore.Domain.Kpay
                 };
                 _db.TblUsers.Add(tblUser);
                 int result = _db.SaveChanges();
-                return result > 0 ? "Registraion Success" : "Fail in Registration";
+
+                if (result > 0)
+                    return Result<UserViewModel>.Success("Registration Success", user);
+                return Result<UserViewModel>.Error("Error Occur");
             }
             else
             {
-                return "Please Complete Information";
+                return Result<UserViewModel>.ValidationError("Please Fill Information First");
             }
         }
-        public string Login(LoginRequestModel loginRequestModel)
+        public Result<LoginRequestModel> Login(LoginRequestModel loginRequestModel)
         {
             if (loginRequestModel.FullName != null && loginRequestModel.Pin != null)
             {
                 var result = _db.TblUsers.FirstOrDefault(x => x.FullName == loginRequestModel.FullName && x.Pin == loginRequestModel.Pin);
                 if (result is not null)
-                    return "Login Success";
+                    return Result<LoginRequestModel>.Success("Login Success", loginRequestModel);
                 else
-                    return "Fail Login";
+                    return Result<LoginRequestModel>.Error("Unsuccess Login");
             }
             else
             {
-                return "Please Fill Information";
+                return Result<LoginRequestModel>.ValidationError("Please Fill Information First");
             }
         }
-        public string Deposit(DepositRequestModel depositRequestModel)
+        public Result<DepositRequestModel> Deposit(DepositRequestModel depositRequestModel)
         {
             if (depositRequestModel.FullName != null && depositRequestModel.MobileNo != null && depositRequestModel.DepositAmount > 0)
             {
@@ -63,26 +68,24 @@ namespace WPADotNetCore.Domain.Kpay
                         Amount = depositRequestModel.DepositAmount,
                         Status = "Credit",
                         CreatedDate = DateTime.Now,
-                        Description="Deposit"
+                        Description = "Deposit"
                     };
                     _db.TblTransactions.Add(transaction);
                     var result = _db.SaveChanges();
                     if (result > 0)
-                    {
-                        return "Successfully Deposit";
-                    }
+                        return Result<DepositRequestModel>.Success("Deposit Process Success", depositRequestModel);
 
                     else
-                        return "Error in Deposit";
+                        return Result<DepositRequestModel>.Error("Error While Saving");
                 }
-                return "User Not Found";
+                return Result<DepositRequestModel>.Error("User Not Found");
             }
             else
             {
-                return "Please Fill Information";
+                return Result<DepositRequestModel>.ValidationError("Please Fill Information First");
             }
         }
-        public string WithDraw(WithDrawRequestModel withDrawRequestModel)
+        public Result<WithDrawRequestModel> WithDraw(WithDrawRequestModel withDrawRequestModel)
         {
             if (withDrawRequestModel.FullName != null && withDrawRequestModel.WithDrawAmount > 0)
             {
@@ -90,7 +93,7 @@ namespace WPADotNetCore.Domain.Kpay
                 if (user != null)
                 {
                     if (user.Balance - withDrawRequestModel.WithDrawAmount < 1000)
-                        return "Insufficient Amount";
+                        return Result<WithDrawRequestModel>.ValidationError("Infufficient Balance");
                     user.Balance -= withDrawRequestModel.WithDrawAmount;
                     _db.TblUsers.Update(user);
                     TblTransaction transaction = new TblTransaction()
@@ -99,40 +102,41 @@ namespace WPADotNetCore.Domain.Kpay
                         Amount = withDrawRequestModel.WithDrawAmount,
                         Status = "Debit",
                         CreatedDate = DateTime.Now,
-                        Description="WithDraw"
+                        Description = "WithDraw"
                     };
                     _db.TblTransactions.Add(transaction);
                     var result = _db.SaveChanges();
                     if (result > 0)
                     {
-                        return "Successfully WithDraw";
+                        return Result<WithDrawRequestModel>.Success("Withdraw Process Success", withDrawRequestModel);
                     }
 
                     else
-                        return "Error in updating";
+                        return Result<WithDrawRequestModel>.Error("User Not Found");
                 }
-                return "User Not Found";
+                return Result<WithDrawRequestModel>.Error("Error While withdrawing");
             }
             else
             {
-                return "Please Fill Information";
+                return Result<WithDrawRequestModel>.ValidationError("Please Fill Information First");
             }
         }
-        public string Transfer(TransferRequestModel transferRequestModel)
+        public Result<TransferRequestModel> Transfer(TransferRequestModel transferRequestModel)
         {
             var validationResult = TransferValidation(transferRequestModel);
             if (validationResult == "Success")
             {
                 var fromTblUser = _db.TblUsers.FirstOrDefault(x => x.FullName == transferRequestModel.FromUser && x.Pin == transferRequestModel.Pin && x.MobileNo == transferRequestModel.FromMobileNo);
                 if (fromTblUser == null)
-                    return "From User Not Found Please Register First";
+                    return Result<TransferRequestModel>.ValidationError("User Not Found");
+
                 var toTblUser = _db.TblUsers.FirstOrDefault(x => x.FullName == transferRequestModel.ToUser && x.MobileNo == transferRequestModel.ToMobileNo);
                 if (toTblUser == null)
-                    return "To User Not Found";
+                    return Result<TransferRequestModel>.ValidationError("To User Not Found");
 
                 if (fromTblUser.Balance - transferRequestModel.TransferBalance < 1000)
                 {
-                    return "Insufficient Balance";
+                    return Result<TransferRequestModel>.ValidationError("Insufficient Balance");
                 }
                 fromTblUser.Balance -= transferRequestModel.TransferBalance;
                 _db.TblUsers.Update(fromTblUser);
@@ -143,7 +147,7 @@ namespace WPADotNetCore.Domain.Kpay
                     Amount = transferRequestModel.TransferBalance,
                     Status = "Debit",
                     CreatedDate = DateTime.Now,
-                    Description="Transfer"
+                    Description = "Transfer"
                 };
 
                 _db.TblTransactions.Add(transaction);
@@ -157,19 +161,19 @@ namespace WPADotNetCore.Domain.Kpay
                     Amount = transferRequestModel.TransferBalance,
                     Status = "Credit",
                     CreatedDate = DateTime.Now,
-                    Description="Transfer"
+                    Description = "Transfer"
                 };
                 _db.TblTransactions.Add(transaction2);
                 var result = _db.SaveChanges();
                 if (result > 0)
                 {
-                    return "Success";
+                    return Result<TransferRequestModel>.Success("Successfully Transfered", transferRequestModel);
                 }
-                return "Fail Transfer Process";
+                return Result<TransferRequestModel>.Error("Error in transfer");
             }
-            return validationResult;
+            return Result<TransferRequestModel>.ValidationError(validationResult);
         }
-        public BalanceViewModel GetUserBalance(UserViewModel userViewModel)
+        public Result<BalanceViewModel> GetUserBalance(UserViewModel userViewModel)
         {
             if (userViewModel.FullName != null && userViewModel.MobileNo != null && userViewModel.Pin != null)
             {
@@ -182,11 +186,12 @@ namespace WPADotNetCore.Domain.Kpay
                         MobileNo = userViewModel.MobileNo,
                         Balance = user.Balance,
                     };
-                    return balance;
+                    return Result<BalanceViewModel>.Success("Success",balance);
                 }
+                return Result<BalanceViewModel>.ValidationError("User Not Found");
 
             }
-            return null;
+            return Result<BalanceViewModel>.ValidationError("Please Fill Information First");
         }
         public string TransferValidation(TransferRequestModel transferRequestModel)
         {
@@ -217,13 +222,13 @@ namespace WPADotNetCore.Domain.Kpay
             else
                 return "Success";
         }
-        public string PinChange(PinChangeRequestModel pinChangeRequestModel)
+        public Result<PinChangeRequestModel> PinChange(PinChangeRequestModel pinChangeRequestModel)
         {
 
             if (pinChangeRequestModel.FullName != null & pinChangeRequestModel.MobileNo != null && pinChangeRequestModel.OldPin != null && pinChangeRequestModel.NewPin != null)
             {
                 if (pinChangeRequestModel.OldPin == pinChangeRequestModel.NewPin)
-                    return "Old Password and New Password are the Same";
+                    return Result<PinChangeRequestModel>.ValidationError("Cannot be the same old pin and new pin");
 
                 var user = _db.TblUsers.FirstOrDefault(x => x.FullName == pinChangeRequestModel.FullName && x.MobileNo == pinChangeRequestModel.MobileNo && x.Pin == pinChangeRequestModel.OldPin);
                 if (user != null)
@@ -232,24 +237,24 @@ namespace WPADotNetCore.Domain.Kpay
                     _db.TblUsers.Update(user);
                     var result = _db.SaveChanges();
                     if (result > 0)
-                        return "Successfully Changed";
+                        return Result<PinChangeRequestModel>.Success("Successfully changed",pinChangeRequestModel);
                     else
-                        return "Fail in Changing Pin";
+                        return Result<PinChangeRequestModel>.Error("Error While Saving");
                 }
-                return "User Not Found";
+                return Result<PinChangeRequestModel>.ValidationError("Uer Not Found");
             }
             else
             {
-                return "Please Fill Information";
+                return Result<PinChangeRequestModel>.ValidationError("Please Fill Information First");
             }
         }
-        public string PhoneNumberChange(PhoneNoChangeRequestModel phoneNoChange)
+        public Result<PhoneNoChangeRequestModel> PhoneNumberChange(PhoneNoChangeRequestModel phoneNoChange)
         {
 
             if (phoneNoChange.FullName != null & phoneNoChange.OldPhoneNo != null && phoneNoChange.Pin != null && phoneNoChange.NewPhoneNo != null)
             {
                 if (phoneNoChange.OldPhoneNo == phoneNoChange.NewPhoneNo)
-                    return "Old Phone No and New Phone No are the Same";
+                    return Result<PhoneNoChangeRequestModel>.ValidationError("Old Phone No and New Phone No are the Same");
 
                 var user = _db.TblUsers.FirstOrDefault(x => x.FullName == phoneNoChange.FullName && x.MobileNo == phoneNoChange.OldPhoneNo && x.Pin == phoneNoChange.Pin);
                 if (user != null)
@@ -258,15 +263,15 @@ namespace WPADotNetCore.Domain.Kpay
                     _db.TblUsers.Update(user);
                     var result = _db.SaveChanges();
                     if (result > 0)
-                        return "Successfully Changed";
+                        return Result<PhoneNoChangeRequestModel>.Success("Success",phoneNoChange);
                     else
-                        return "Fail in Changing Phone No";
+                        return Result<PhoneNoChangeRequestModel>.Error("User Not Found");
                 }
-                return "User Not Found";
+                return Result<PhoneNoChangeRequestModel>.Error("User Not Found");
             }
             else
             {
-                return "Please Fill Information";
+                return Result<PhoneNoChangeRequestModel>.ValidationError("Please Full Fill Information First");
             }
         }
     }
